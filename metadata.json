@@ -1,0 +1,6 @@
+{
+  "name": "README Markdown Editor",
+  "description": "An application to help create and format README.md content with a user-friendly interface. It provides toolbar buttons for common Markdown syntax and an emoji selector, then generates the Markdown code for easy copying.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
