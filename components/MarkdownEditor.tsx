@@ -5,6 +5,7 @@ import { ToolbarButton } from './ToolbarButton';
 import {
   BoldIcon, ItalicIcon, LinkIcon, ListUnorderedIcon, ListOrderedIcon,
   CodeIcon, QuoteIcon, ImageIcon, HorizontalRuleIcon, EyeIcon, CodeSimpleIcon,
+  CopyIcon, // Added CopyIcon
 } from './icons';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -14,12 +15,19 @@ declare var TurndownService: any;
 interface MarkdownEditorProps {
   initialContent: string;
   onContentChange: (content: string) => void;
+  onCopyContent: () => Promise<void>; // Renamed from onCopyRequest for clarity with App.tsx
+  showCopiedMessage: boolean; // Renamed from isCopyInProgressOrDone
 }
 
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 type EditingMode = 'raw' | 'visual';
 
-export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, onContentChange }) => {
+export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ 
+  initialContent, 
+  onContentChange,
+  onCopyContent,
+  showCopiedMessage
+}) => {
   const { t } = useTranslation();
   const [markdownContent, setMarkdownContent] = useState<string>(initialContent);
   const [editingMode, setEditingMode] = useState<EditingMode>('raw');
@@ -43,6 +51,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
   }, [markdownContent, onContentChange]);
 
    useEffect(() => {
+    // Only update markdownContent from initialContent if they are different
+    // This prevents resetting user input if initialContent reference changes but value is same
     if (initialContent !== markdownContent) {
      setMarkdownContent(initialContent);
     }
@@ -55,6 +65,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
         const currentSelectionStart = textareaRef.current.selectionStart;
         const currentSelectionEnd = textareaRef.current.selectionEnd;
         textareaRef.current.value = markdownContent;
+        // Restore selection only if the textarea is focused to avoid errors
         if (document.activeElement === textareaRef.current) {
              textareaRef.current.setSelectionRange(currentSelectionStart, currentSelectionEnd);
         }
@@ -105,7 +116,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
     const { newValue, newStart, newEnd } = callback(value, selectionStart, selectionEnd);
     setMarkdownContent(newValue);
     textareaRef.current.focus();
-    setRawSelection({ start: newStart, end: newEnd });
+    // Use a timeout to ensure the state update has propagated before setting selection
+    setTimeout(() => {
+       if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newStart, newEnd);
+       }
+    }, 0);
   }, []);
 
   const execVisualCommand = (command: string, value?: string) => {
@@ -125,6 +141,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
       if (newMode === 'visual' && visualEditorRef.current && typeof marked !== 'undefined') {
         visualEditorRef.current.innerHTML = marked.parse(markdownContent);
       } else if (newMode === 'raw' && textareaRef.current) {
+        // Ensure textarea value is updated if content changed in visual mode
         textareaRef.current.value = markdownContent;
       }
       return newMode;
@@ -160,10 +177,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
       const prefix = '#'.repeat(level) + ' ';
       applyRawFormat((val, start, _end) => {
         let lineStart = val.lastIndexOf('\n', start -1) + 1;
-        let lineEnd = val.indexOf('\n', start);
+        // Find end of the line cursor is on, or end of selection if multiline
+        let searchPos = Math.max(start, _end);
+        let lineEnd = val.indexOf('\n', searchPos);
         if (lineEnd === -1) lineEnd = val.length;
         
         let currentLine = val.substring(lineStart, lineEnd);
+        // Remove existing heading prefix from the current line only
         currentLine = currentLine.replace(/^#+\s*/, '');
         const newLine = prefix + currentLine;
         
@@ -189,11 +209,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
       });
     } else {
       const selection = window.getSelection();
-      if (!selection || selection.toString().trim() === "") {
-        const linkText = prompt(t('linkDefaultText') + ':', t('linkDefaultText'));
-        if (linkText) {
-          insertVisualHTML(`<a href="${url}" target="_blank">${linkText}</a>`);
-        }
+      let selectedText = selection ? selection.toString() : '';
+      if (!selectedText.trim()) {
+        selectedText = prompt(t('linkTextPrompt') || 'Enter link text:', t('linkDefaultText')) || t('linkDefaultText');
+         if(selectedText) execVisualCommand('insertHTML', `<a href="${url}" target="_blank">${selectedText}</a>`);
       } else {
          execVisualCommand('createLink', url);
       }
@@ -203,7 +222,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
   const handleImage = () => {
     const url = prompt(t('imageUrlPrompt'), 'https://picsum.photos/200');
     if (!url) return;
-    const altText = prompt(t('imageDefaultAlt') + ':', t('imageDefaultAlt'));
+    const altText = prompt(t('imageAltPrompt') || t('imageDefaultAlt') + ':', t('imageDefaultAlt'));
 
     if (editingMode === 'raw') {
       applyRawFormat((val, start, _end) => {
@@ -221,17 +240,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
     if (editingMode === 'raw') {
        applyRawFormat((val, start, end) => {
         const selection = val.substring(start, end);
-        if (selection.includes('\n')) { // Multi-line selection
+        if (selection.includes('\n')) { 
           const lines = selection.split('\n');
-          const newLines = lines.map(line => `- ${line}`).join('\n');
+          const newLines = lines.map(line => line.trim() === '' ? line : `- ${line}`).join('\n');
           const newValue = val.substring(0, start) + newLines + val.substring(end);
           return { newValue, newStart: start, newEnd: start + newLines.length };
-        } else { // Single line or no selection
+        } else { 
           let lineStart = val.lastIndexOf('\n', start - 1) + 1;
+          const currentLine = val.substring(lineStart, end);
           const prefix = '- ';
-          const indentedText = prefix + val.substring(lineStart, end);
-          const newValue = val.substring(0, lineStart) + indentedText + val.substring(end);
-          return { newValue, newStart: lineStart + prefix.length, newEnd: lineStart + indentedText.length };
+          const newTextForLine = prefix + currentLine;
+          const newValue = val.substring(0, lineStart) + newTextForLine + val.substring(end);
+          return { newValue, newStart: lineStart + prefix.length, newEnd: lineStart + newTextForLine.length };
         }
       });
     } else {
@@ -243,17 +263,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
      if (editingMode === 'raw') {
       applyRawFormat((val, start, end) => {
         const selection = val.substring(start, end);
-        if (selection.includes('\n')) { // Multi-line selection
+        if (selection.includes('\n')) { 
           const lines = selection.split('\n');
-          const newLines = lines.map((line, index) => `${index + 1}. ${line}`).join('\n');
+          const newLines = lines.map((line, index) => line.trim() === '' ? line : `${index + 1}. ${line}`).join('\n');
           const newValue = val.substring(0, start) + newLines + val.substring(end);
           return { newValue, newStart: start, newEnd: start + newLines.length };
-        } else { // Single line or no selection
+        } else { 
           let lineStart = val.lastIndexOf('\n', start - 1) + 1;
+          const currentLine = val.substring(lineStart, end);
           const prefix = '1. ';
-          const indentedText = prefix + val.substring(lineStart, end);
-          const newValue = val.substring(0, lineStart) + indentedText + val.substring(end);
-          return { newValue, newStart: lineStart + prefix.length, newEnd: lineStart + indentedText.length };
+          const newTextForLine = prefix + currentLine;
+          const newValue = val.substring(0, lineStart) + newTextForLine + val.substring(end);
+          return { newValue, newStart: lineStart + prefix.length, newEnd: lineStart + newTextForLine.length };
         }
       });
     } else {
@@ -265,8 +286,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
     if (editingMode === 'raw') {
       applyRawFormat((val, start, end) => {
         const selectedText = val.substring(start, end);
-        if (selectedText.includes('\n') || start === end) { 
-          const newText = `${val.substring(0, start)}\`\`\`\n${selectedText || t('codePlaceholder')}\n\`\`\`${val.substring(end)}`;
+        if (selectedText.includes('\n') || start === end || val.substring(val.lastIndexOf('\n', start -1)+1, start).trim() === '' ) { 
+          const newText = `${val.substring(0, start)}\`\`\`\n${selectedText || t('codePlaceholder')}\n\`\`\`\n${val.substring(end)}`;
           return { newValue: newText, newStart: start + 4, newEnd: start + 4 + (selectedText || t('codePlaceholder')).length };
         } else { 
           const newText = `${val.substring(0, start)}\`${selectedText}\`${val.substring(end)}`;
@@ -275,12 +296,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
       });
     } else {
       const selection = window.getSelection();
-      if (selection && (selection.toString().includes('\n') || selection.toString().trim() === '')) {
-        insertVisualHTML(`<pre><code>${selection.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;") || t('codePlaceholder')}</code></pre>`);
-      } else if (selection && selection.toString().length > 0) {
-        insertVisualHTML(`<code>${selection.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code>`);
+      const selectedText = selection ? selection.toString() : '';
+      if (selectedText.includes('\n') || selectedText.trim() === '') {
+        insertVisualHTML(`<pre><code>${selectedText.replace(/</g, "&lt;").replace(/>/g, "&gt;") || t('codePlaceholder')}</code></pre>`);
       } else {
-        insertVisualHTML(`<pre><code>${t('codePlaceholder')}</code></pre>`);
+        insertVisualHTML(`<code>${selectedText.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code>`);
       }
     }
   };
@@ -289,18 +309,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
      if (editingMode === 'raw') {
       applyRawFormat((val, start, end) => {
         const selection = val.substring(start, end);
-         if (selection.includes('\n')) { // Multi-line selection
+         if (selection.includes('\n')) { 
           const lines = selection.split('\n');
-          const newLines = lines.map(line => `> ${line}`).join('\n');
+          const newLines = lines.map(line => line.trim() === '' ? line : `> ${line}`).join('\n');
           const newValue = val.substring(0, start) + newLines + val.substring(end);
           return { newValue, newStart: start, newEnd: start + newLines.length };
-        } else { // Single line or no selection
+        } else { 
           let lineStart = val.lastIndexOf('\n', start - 1) + 1;
+          const currentLineOriginal = val.substring(lineStart, end);
           const prefix = '> ';
-          const indentedText = prefix + (selection || val.substring(lineStart, end));
-          const newValue = val.substring(0, lineStart) + indentedText + (selection ? val.substring(end) : val.substring(lineStart === end ? end : Math.max(end, lineStart + (selection ? selection.length : 0) ) ) );
-
-          return { newValue, newStart: lineStart + prefix.length, newEnd: lineStart + indentedText.length };
+          const newTextForLine = prefix + currentLineOriginal;
+          const newValue = val.substring(0, lineStart) + newTextForLine + val.substring(end);
+          return { newValue, newStart: lineStart + prefix.length, newEnd: lineStart + newTextForLine.length };
         }
       });
     } else {
@@ -311,7 +331,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
   const handleHorizontalRule = () => {
     if (editingMode === 'raw') {
       applyRawFormat((val, start, _end) => {
-        const hrText = (start === 0 || val[start-1] === '\n' ? '' : '\n') + '---\n';
+        const prevChar = val[start-1];
+        const needsNewlineBefore = start > 0 && prevChar !== '\n';
+        const hrText = (needsNewlineBefore ? '\n' : '') + '---\n';
         const newText = `${val.substring(0, start)}${hrText}${val.substring(start)}`;
         const newCursorPos = start + hrText.length;
         return { newValue: newText, newStart: newCursorPos, newEnd: newCursorPos };
@@ -339,7 +361,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
       <div className="p-2 bg-slate-100 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600 flex flex-wrap gap-1.5 items-center relative transition-colors duration-300">
         <ToolbarButton 
           onClick={toggleMode} 
-          title={editingMode === 'raw' ? t('rawModeTooltip') : t('visualModeTooltip')}
+          title={editingMode === 'raw' ? t('visualModeTooltip') : t('rawModeTooltip')} /* Corrected tooltip logic */
         >
           {editingMode === 'raw' ? <EyeIcon className="w-5 h-5" /> : <CodeSimpleIcon className="w-5 h-5" />}
         </ToolbarButton>
@@ -378,12 +400,27 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
             </div>
           )}
         </div>
+         {/* Copy Button Section */}
+        <div className="ml-auto flex items-center pl-2 space-x-2">
+            {showCopiedMessage && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                {t('copiedMessage')}
+            </span>
+            )}
+            <ToolbarButton
+                onClick={onCopyContent}
+                title={t('copyButton')}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            >
+                <CopyIcon className="w-5 h-5" />
+            </ToolbarButton>
+        </div>
       </div>
       
       {editingMode === 'raw' && (
         <textarea
           ref={textareaRef}
-          value={markdownContent}
+          value={markdownContent} /* Controlled component */
           onChange={handleRawEditorChange}
           onSelect={handleRawEditorSelect}
           className="flex-grow p-4 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none resize-none leading-relaxed font-mono text-sm selection:bg-sky-300 dark:selection:bg-sky-500 selection:text-black dark:selection:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors duration-300"
@@ -398,7 +435,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
             contentEditable={true}
             suppressContentEditableWarning={true}
             onInput={handleVisualEditorInput}
-            onBlur={syncVisualToMarkdown}
+            onBlur={syncVisualToMarkdown} // Sync on blur to catch any final changes
             className="ProseMirror" // Styles are in index.html
             aria-label="Markdown Editor (Visual)"
          />

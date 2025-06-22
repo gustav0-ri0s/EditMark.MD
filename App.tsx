@@ -48,7 +48,7 @@ Please make sure to update tests as appropriate.
 
   const [editorContent, setEditorContent] = useState<string>(() => getDefaultReadmeContent());
   const [finalMarkdown, setFinalMarkdown] = useState<string>('');
-  const [showCopiedMessage, setShowCopiedMessage] = useState<boolean>(false);
+  const [showEditorCopiedMessage, setShowEditorCopiedMessage] = useState<boolean>(false);
   
   useEffect(() => {
      setEditorContent(prevContent => {
@@ -74,17 +74,17 @@ Please make sure to update tests as appropriate.
     setFinalMarkdown(editorContent);
   }, [editorContent]);
 
-  const handleCopyToClipboard = useCallback(async () => {
-    if (!finalMarkdown) return;
+  const handleCopyEditorContent = useCallback(async () => {
+    if (!editorContent) return;
     try {
-      await navigator.clipboard.writeText(finalMarkdown);
-      setShowCopiedMessage(true);
-      setTimeout(() => setShowCopiedMessage(false), 2000);
+      await navigator.clipboard.writeText(editorContent);
+      setShowEditorCopiedMessage(true);
+      setTimeout(() => setShowEditorCopiedMessage(false), 2000);
     } catch (err) {
       console.error('Failed to copy text: ', err);
-      alert('Failed to copy text. See console for details.');
+      alert(t('copyFailedAlert')); // It's good practice to translate alerts too
     }
-  }, [finalMarkdown]);
+  }, [editorContent, t]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800 text-slate-800 dark:text-slate-100 p-4 sm:p-6 lg:p-8 flex flex-col relative transition-colors duration-300">
@@ -110,6 +110,8 @@ Please make sure to update tests as appropriate.
           <MarkdownEditor
             initialContent={editorContent}
             onContentChange={setEditorContent}
+            onCopyContent={handleCopyEditorContent}
+            showCopiedMessage={showEditorCopiedMessage}
           />
         </div>
 
@@ -124,7 +126,7 @@ Please make sure to update tests as appropriate.
             </button>
           </div>
           {finalMarkdown ? (
-            <MarkdownPreview markdown={finalMarkdown} onCopy={handleCopyToClipboard} showCopiedMessage={showCopiedMessage} />
+            <MarkdownPreview markdown={finalMarkdown} />
           ) : (
             <div className="p-6 text-slate-500 dark:text-slate-400 flex-grow flex items-center justify-center transition-colors duration-300">
               <p>{t('previewPlaceholder')}</p>

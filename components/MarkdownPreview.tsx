@@ -1,37 +1,44 @@
-
 import React from 'react';
 import { useTranslation } from '../hooks/useTranslation';
 
+// Ensure marked is declared as it's loaded globally via CDN
+declare var marked: any;
+
 interface MarkdownPreviewProps {
   markdown: string;
-  onCopy: () => void;
-  showCopiedMessage: boolean;
+  // onCopy and showCopiedMessage are removed
 }
 
-export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ markdown, onCopy, showCopiedMessage }) => {
-  const { t } = useTranslation();
+export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ markdown }) => {
+  const { t } = useTranslation(); // t might still be used for error messages or future additions
+
+  const parsedHtml = React.useMemo(() => {
+    if (!markdown) {
+      return '';
+    }
+    if (typeof marked === 'undefined' || typeof marked.parse !== 'function') {
+      console.warn('marked.js is not loaded. Preview will show raw markdown as fallback.');
+      const escapedMarkdown = markdown.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `<pre style="white-space: pre-wrap; word-break: break-word; font-family: monospace; font-size: 0.875rem;">${escapedMarkdown}</pre>`;
+    }
+    try {
+      return marked.parse(markdown);
+    } catch (error) {
+      console.error("Error parsing markdown:", error);
+      const escapedMarkdown = markdown.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      // Use translation for user-facing error part
+      return `<p>${t('previewErrorText') || 'Error rendering preview. Raw content:'}</p><pre style="white-space: pre-wrap; word-break: break-word; font-family: monospace; font-size: 0.875rem;">${escapedMarkdown}</pre>`;
+    }
+  }, [markdown, t]);
 
   return (
     <div className="flex flex-col h-full">
-      <div className="relative flex-grow p-4 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 overflow-auto transition-colors duration-300">
-        <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-relaxed">
-          {markdown || t('previewPlaceholder')}
-        </pre>
-      </div>
-      <div className="p-3 bg-slate-100 dark:bg-slate-700/50 border-t border-slate-200 dark:border-slate-600 flex justify-end items-center transition-colors duration-300">
-        {showCopiedMessage && (
-          <span className="text-sm text-green-500 dark:text-green-400 mr-3 transition-opacity duration-300">
-            {t('copiedMessage')}
-          </span>
-        )}
-        <button
-          onClick={onCopy}
-          disabled={!markdown}
-          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md shadow-md transition-colors duration-150 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {t('copyButton')}
-        </button>
-      </div>
+      <div
+        className="flex-grow overflow-auto ProseMirror p-4" // Added p-4 for consistency if footer is removed
+        dangerouslySetInnerHTML={{ __html: parsedHtml }}
+        aria-live="polite" // Announce changes to screen readers
+      />
+      {/* Footer with copy button removed */}
     </div>
   );
 };

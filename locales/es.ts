@@ -8,13 +8,16 @@ export const es = {
   generateButton: "Generar y Previsualizar",
   previewPlaceholder: "Haz clic en \"Generar y Previsualizar\" para ver tu Markdown aquí.",
   copyButton: "Copiar Markdown",
-  copiedMessage: "¡Copiado al portapapeles!",
+  copiedMessage: "¡Copiado!",
   footerText: "Construido con React, TypeScript y Tailwind CSS.",
   createdBy: "Creado por Gustavo Rios",
-  
+  copyFailedAlert: "Error al copiar texto. Revisa la consola para más detalles.",
+  previewErrorText: "Error al renderizar la vista previa. Contenido raw:",
+
+
   // MarkdownEditor.tsx
-  rawModeTooltip: "Cambiar a Modo Visual",
-  visualModeTooltip: "Cambiar a Modo Raw",
+  rawModeTooltip: "Cambiar a Modo Raw", // Tooltip when in Visual mode, to switch to Raw
+  visualModeTooltip: "Cambiar a Modo Visual", // Tooltip when in Raw mode, to switch to Visual
   boldTooltip: "Negrita",
   italicTooltip: "Cursiva",
   headingTooltip: (level: number) => `Encabezado ${level}`,
@@ -30,8 +33,10 @@ export const es = {
   
   linkUrlPrompt: "Introduce la URL:",
   linkDefaultText: "texto del enlace",
+  linkTextPrompt: "Introduce el texto del enlace:",
   imageUrlPrompt: "Introduce la URL de la imagen:",
   imageDefaultAlt: "imagen",
+  imageAltPrompt: "Introduce el texto alternativo de la imagen:",
   codePlaceholder: "código aquí",
 
   // LanguageSwitcher.tsx

@@ -10,13 +10,15 @@ export const en: TranslationKeys = {
   generateButton: "Generate & Preview",
   previewPlaceholder: "Click \"Generate & Preview\" to see your Markdown here.",
   copyButton: "Copy Markdown",
-  copiedMessage: "Copied to clipboard!",
+  copiedMessage: "Copied!",
   footerText: "Built with React, TypeScript, and Tailwind CSS.",
   createdBy: "Created by Gustavo Rios",
+  copyFailedAlert: "Failed to copy text. See console for details.",
+  previewErrorText: "Error rendering preview. Raw content:",
 
   // MarkdownEditor.tsx
-  rawModeTooltip: "Switch to Visual Mode",
-  visualModeTooltip: "Switch to Raw Mode",
+  rawModeTooltip: "Switch to Raw Mode", // Tooltip when in Visual mode, to switch to Raw
+  visualModeTooltip: "Switch to Visual Mode", // Tooltip when in Raw mode, to switch to Visual
   boldTooltip: "Bold",
   italicTooltip: "Italic",
   headingTooltip: (level: number) => `Heading ${level}`,
@@ -32,8 +34,10 @@ export const en: TranslationKeys = {
 
   linkUrlPrompt: "Enter URL:",
   linkDefaultText: "link text",
+  linkTextPrompt: "Enter link text:",
   imageUrlPrompt: "Enter image URL:",
   imageDefaultAlt: "image",
+  imageAltPrompt: "Enter image alt text:",
   codePlaceholder: "code here",
   
   // LanguageSwitcher.tsx
